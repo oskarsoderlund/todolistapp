@@ -48,8 +48,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 # Writable data volume.
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
-VOLUME ["/app/data"]
-
 USER nextjs
 EXPOSE 3000
 
