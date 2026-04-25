@@ -5,53 +5,72 @@ import { join } from "node:path";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
-const MAX_FRAMES = 100;
+const MAX_FRAMES = 60;
 const FRAME_WIDTH = 512;
 
-export async function analyzeTikTokVideo(url: string): Promise<string> {
-  const canonicalUrl = await resolveTikTokUrl(url);
+export interface AnalyzeOptions {
+  signal?: AbortSignal;
+}
+
+export async function analyzeTikTokVideo(
+  url: string,
+  { signal }: AnalyzeOptions = {},
+): Promise<string> {
+  const canonicalUrl = await resolveTikTokUrl(url, signal);
   const workDir = await mkdtemp(join(tmpdir(), "tiktok-"));
 
   try {
     const videoPath = join(workDir, "video.mp4");
-    await run("yt-dlp", [
-      "--no-warnings",
-      "--no-playlist",
-      "-f",
-      "mp4/bestvideo*+bestaudio/best",
-      "--merge-output-format",
-      "mp4",
-      "-o",
-      videoPath,
-      canonicalUrl,
-    ]);
+    await run(
+      "yt-dlp",
+      [
+        "--no-warnings",
+        "--no-playlist",
+        "-f",
+        "mp4/bestvideo*+bestaudio/best",
+        "--merge-output-format",
+        "mp4",
+        "-o",
+        videoPath,
+        canonicalUrl,
+      ],
+      signal,
+    );
 
     const framesPattern = join(workDir, "frame-%03d.jpg");
-    await run("ffmpeg", [
-      "-y",
-      "-i",
-      videoPath,
-      "-vf",
-      `fps=1,scale=${FRAME_WIDTH}:-1`,
-      "-frames:v",
-      String(MAX_FRAMES),
-      framesPattern,
-    ]);
+    await run(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        videoPath,
+        "-vf",
+        `fps=1,scale=${FRAME_WIDTH}:-1`,
+        "-frames:v",
+        String(MAX_FRAMES),
+        framesPattern,
+      ],
+      signal,
+    );
 
     const audioPath = join(workDir, "audio.mp3");
-    await run("ffmpeg", [
-      "-y",
-      "-i",
-      videoPath,
-      "-vn",
-      "-c:a",
-      "libmp3lame",
-      "-q:a",
-      "5",
-      audioPath,
-    ]);
+    await run(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        videoPath,
+        "-vn",
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "5",
+        audioPath,
+      ],
+      signal,
+    );
 
-    const transcript = await transcribeAudio(audioPath);
+    const transcript = await transcribeAudio(audioPath, signal);
     const frames = await readFrames(workDir);
 
     if (frames.length === 0) {
@@ -60,6 +79,7 @@ export async function analyzeTikTokVideo(url: string): Promise<string> {
 
     const { text } = await generateText({
       model: anthropic("claude-sonnet-4-5"),
+      abortSignal: signal,
       messages: [
         {
           role: "user",
@@ -88,9 +108,16 @@ export async function analyzeTikTokVideo(url: string): Promise<string> {
   }
 }
 
-async function resolveTikTokUrl(url: string): Promise<string> {
+async function resolveTikTokUrl(
+  url: string,
+  signal?: AbortSignal,
+): Promise<string> {
   try {
-    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal,
+    });
     return res.url || url;
   } catch {
     return url;
@@ -105,7 +132,10 @@ async function readFrames(dir: string): Promise<Buffer[]> {
   return Promise.all(frameFiles.map((f) => readFile(join(dir, f))));
 }
 
-async function transcribeAudio(audioPath: string): Promise<string> {
+async function transcribeAudio(
+  audioPath: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -121,6 +151,7 @@ async function transcribeAudio(audioPath: string): Promise<string> {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
+    signal,
   });
 
   if (!res.ok) {
@@ -131,21 +162,26 @@ async function transcribeAudio(audioPath: string): Promise<string> {
   return json.text ?? "";
 }
 
-function run(cmd: string, args: string[]): Promise<void> {
+function run(cmd: string, args: string[], signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cmd, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      signal,
+    });
     let stderr = "";
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
     });
     child.on("error", (err) => reject(err));
-    child.on("close", (code) => {
+    child.on("close", (code, killSignal) => {
       if (code === 0) {
         resolve();
+      } else if (signal?.aborted) {
+        reject(new Error(`${cmd} avbröts (klient stängde anslutningen).`));
       } else {
         reject(
           new Error(
-            `${cmd} avslutades med kod ${code}: ${stderr.slice(-400).trim()}`,
+            `${cmd} avslutades med kod ${code ?? `signal ${killSignal}`}: ${stderr.slice(-400).trim()}`,
           ),
         );
       }

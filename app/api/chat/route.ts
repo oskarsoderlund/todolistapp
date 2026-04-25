@@ -34,5 +34,11 @@ export async function POST(req: Request) {
     maxSteps: 5,
   });
 
-  return result.toDataStreamResponse();
+  return result.toDataStreamResponse({
+    getErrorMessage: (error) => {
+      console.error("[chat] streamText error:", error);
+      if (error instanceof Error) return `${error.name}: ${error.message}`;
+      return String(error);
+    },
+  });
 }

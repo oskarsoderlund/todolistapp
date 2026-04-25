@@ -94,6 +94,11 @@ npm run db:init                      # skapar data/todo.db
 # Dev-server:
 npm run dev                          # http://localhost:3000
 
+# Om du startar dev från Claude Code (eller någon process som
+# exporterar tom ANTHROPIC_API_KEY): använd dev:safe — den
+# unsetter variabeln så Next läser den från .env.local.
+npm run dev:safe
+
 # Production build + start:
 npm run build
 npm start

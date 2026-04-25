@@ -65,9 +65,9 @@ export const todoTools = {
         .url()
         .describe("TikTok-URL, antingen kort (vm.tiktok.com/...) eller full."),
     }),
-    execute: async ({ url }) => {
+    execute: async ({ url }, { abortSignal }) => {
       try {
-        const summary = await analyzeTikTokVideo(url);
+        const summary = await analyzeTikTokVideo(url, { signal: abortSignal });
         return { ok: true, summary };
       } catch (err) {
         return {
