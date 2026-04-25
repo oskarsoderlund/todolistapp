@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { addTask, completeTask, getTasks } from "./db";
+import { analyzeTikTokVideo } from "./tiktok";
 
 export const todoTools = {
   add_task: tool({
@@ -52,6 +53,28 @@ export const todoTools = {
         return { ok: false, error: "Uppgiften hittades inte." };
       }
       return { ok: true, task: result };
+    },
+  }),
+
+  analyze_tiktok_video: tool({
+    description:
+      "Analysera en TikTok-video från en URL. Verktyget laddar ner videon, extraherar bildrutor, transkriberar ljudet och returnerar en kort sammanfattning på svenska. Använd när användaren delar en TikTok-länk (vm.tiktok.com/... eller tiktok.com/...).",
+    parameters: z.object({
+      url: z
+        .string()
+        .url()
+        .describe("TikTok-URL, antingen kort (vm.tiktok.com/...) eller full."),
+    }),
+    execute: async ({ url }) => {
+      try {
+        const summary = await analyzeTikTokVideo(url);
+        return { ok: true, summary };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
     },
   }),
 };

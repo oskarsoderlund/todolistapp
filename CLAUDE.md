@@ -6,6 +6,8 @@ Persistent kontext för framtida Claude Code-sessioner i detta repo.
 
 Chat-baserad todo-lista där användaren pratar med Claude på svenska. AI:n använder function calling för att lägga till, hämta och markera uppgifter som klara i en lokal SQLite. UI:t visar en live-sidebar med öppna uppgifter som uppdateras direkt efter varje tool-anrop.
 
+Utöver todo-hanteringen finns ett `analyze_tiktok_video`-tool som tar en TikTok-URL, laddar ner videon med `yt-dlp`, extraherar bildrutor + ljud med `ffmpeg`, transkriberar ljudet via OpenAI Whisper och låter Claude sammanfatta videon multimodalt. Resultatet visas som chat-svar och skrivs **inte** till todo-databasen.
+
 ## Tech stack
 
 | Lager | Val |
@@ -32,7 +34,8 @@ Chat-baserad todo-lista där användaren pratar med Claude på svenska. AI:n anv
 │       └── tasks/route.ts      # GET — läser pending/completed/all till sidebar
 ├── lib/
 │   ├── db.ts                   # better-sqlite3 singleton, schema, helpers (addTask/getTasks/completeTask)
-│   └── tools.ts                # AI SDK tool-definitioner (add_task / get_tasks / complete_task)
+│   ├── tools.ts                # AI SDK tool-definitioner (add_task / get_tasks / complete_task / analyze_tiktok_video)
+│   └── tiktok.ts               # TikTok-pipelinen (yt-dlp → ffmpeg → Whisper → multimodal Claude)
 ├── scripts/
 │   └── init-db.mjs             # Idempotent CREATE TABLE, körs av `npm run db:init` och i Docker CMD
 ├── data/                       # SQLite-filer (gitignorerad, dockerignorerad volym)
@@ -71,6 +74,7 @@ Definierade i [lib/tools.ts](lib/tools.ts), registrerade i [app/api/chat/route.t
 | `add_task` | `description: string`, `priority: 'low'\|'medium'\|'high'` | `INSERT ... RETURNING *` |
 | `get_tasks` | `filter: 'pending'\|'completed'\|'all'` (default `pending`) | `SELECT` sorterat på prioritet + datum |
 | `complete_task` | `id: number` | `UPDATE status='completed' ... RETURNING *`, returnerar `{error: 'not_found'}` om id saknas |
+| `analyze_tiktok_video` | `url: string` (TikTok-URL) | yt-dlp → ffmpeg (frames + mp3) → Whisper → multimodal `generateText`, returnerar `{ summary }` |
 
 System prompt (i `chat/route.ts`) instruerar Claude att:
 - Proaktivt använda tools utan att fråga om lov
@@ -122,9 +126,19 @@ Containern kör `node scripts/init-db.mjs && node server.js` vid start, så sche
 | Variabel | Obligatorisk | Default | Beskrivning |
 |---|---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ | — | API-nyckel för Claude |
+| `OPENAI_API_KEY` | ✅ (för `analyze_tiktok_video`) | — | API-nyckel för OpenAI Whisper-transkription |
 | `DB_PATH` | ❌ | `./data/todo.db` (lokalt) · `/app/data/todo.db` (Docker) | Absolut sökväg till SQLite-filen |
 | `PORT` | ❌ | `3000` | Next.js server-port |
 | `HOSTNAME` | ❌ | `0.0.0.0` i Docker | Bind address |
+
+### Systemberoenden (utöver Node)
+
+`analyze_tiktok_video` spawnar två externa binärer som måste finnas på `PATH`:
+
+- `yt-dlp` — laddar ner TikTok-videon
+- `ffmpeg` — extraherar bildrutor och ljud
+
+Dockerfilen installerar båda i `runner`-stagen. Lokalt: `brew install yt-dlp ffmpeg` (macOS) eller motsvarande paketmanager.
 
 ## Viktiga fotgropar (läs innan du ändrar)
 

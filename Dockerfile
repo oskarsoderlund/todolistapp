@@ -28,6 +28,11 @@ ENV HOSTNAME=0.0.0.0
 # Store the SQLite DB under /app/data so it can be mounted as a volume.
 ENV DB_PATH=/app/data/todo.db
 
+# ffmpeg + yt-dlp are required by the TikTok analyzer tool.
+# yt-dlp via pip — Alpine's package can lag behind TikTok's API changes.
+RUN apk add --no-cache ffmpeg python3 py3-pip \
+ && pip3 install --break-system-packages --no-cache-dir yt-dlp
+
 # Non-root user for runtime.
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs

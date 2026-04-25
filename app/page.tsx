@@ -201,6 +201,7 @@ function EmptyState() {
     "Lägg till att handla mjölk",
     "Vad ska jag prioritera?",
     "Markera uppgift 1 som klar",
+    "Analysera https://vm.tiktok.com/…",
   ];
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12 gap-4">
@@ -273,6 +274,11 @@ function ToolBadge({
     if (name === "complete_task") {
       const args = invocation.args as { id?: number } | undefined;
       return `Markerade #${args?.id ?? "?"} som klar`;
+    }
+    if (name === "analyze_tiktok_video") {
+      return state === "result"
+        ? "Analyserade TikTok-video"
+        : "Analyserar TikTok-video…";
     }
     return name;
   })();
