@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
-const FRAME_COUNT = 6;
+const MAX_FRAMES = 100;
 const FRAME_WIDTH = 512;
 
 export async function analyzeTikTokVideo(url: string): Promise<string> {
@@ -32,11 +32,9 @@ export async function analyzeTikTokVideo(url: string): Promise<string> {
       "-i",
       videoPath,
       "-vf",
-      `thumbnail,scale=${FRAME_WIDTH}:-1`,
+      `fps=1,scale=${FRAME_WIDTH}:-1`,
       "-frames:v",
-      String(FRAME_COUNT),
-      "-vsync",
-      "vfr",
+      String(MAX_FRAMES),
       framesPattern,
     ]);
 
@@ -72,7 +70,7 @@ export async function analyzeTikTokVideo(url: string): Promise<string> {
                 "Analysera denna TikTok-video. Ge en koncis sammanfattning på svenska (2-4 meningar) som beskriver vad videon handlar om, vad som händer visuellt och vad som sägs. Avsluta med en kort mening om videons budskap eller poäng.\n\n" +
                 `Källa: ${canonicalUrl}\n\n` +
                 `Transkription av ljudspåret:\n${transcript || "(inget tal eller ljud kunde transkriberas)"}\n\n` +
-                `Bildrutorna nedan är ${frames.length} stycken stillbilder utvalda jämnt över videon.`,
+                `Bildrutorna nedan är ${frames.length} stillbilder, en per sekund av videon i kronologisk ordning.`,
             },
             ...frames.map((image) => ({
               type: "image" as const,
